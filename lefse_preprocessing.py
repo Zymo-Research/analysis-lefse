@@ -1,0 +1,91 @@
+import subprocess
+import hashlib
+import hmac
+import json
+import requests
+import pymongo
+import os
+import pandas as pd
+
+# Load configuration from environment variables
+DOCDB_HOST = os.getenv("DOCDB_HOST", "dev-documentdb.cluster-cu9wyuyqqen8.ap-southeast-1.docdb.amazonaws.com")
+DOCDB_PORT = int(os.getenv("DOCDB_PORT", "27017"))
+DOCDB_PASSWORD = os.getenv("DOCDB_PASSWORD", "YOUR_DOCDB_PASSWORD")
+DOCDB_USER = os.getenv("DOCDB_USER", "integratedOmics")
+PORTAL_API_BASE_URL = os.getenv("PORTAL_API_BASE_URL", "http://localhost:8000")
+
+API_KEY = os.getenv("API_KEY", "test")
+ANALYSIS_ID = os.getenv("ANALYSIS_ID")
+WORKSPACE_ID = os.getenv("WORKSPACE_ID")
+
+INPUT_FILE = "/data/input_data.txt"
+
+def get_local_client():
+    db = pymongo.MongoClient(
+        "mongodb://{}:{}@{}:{}/".format(DOCDB_USER, DOCDB_PASSWORD, DOCDB_HOST, DOCDB_PORT),
+        tls=True,
+        tlsAllowInvalidHostnames=True,
+        tlsCAFile="/app/global-bundle.pem",
+        replicaSet="rs0",
+        readPreference="secondaryPreferred",
+        retryWrites=False,
+        directConnection=True,
+    )
+    yield db
+
+def main():
+    # Step 1: Request metadata
+    payload = json.dumps({"analysis_id": ANALYSIS_ID}, separators=(',', ':'), ensure_ascii=False)
+    signature = hmac.new(API_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+    url = "{}/external/lefse_input?workspace_id={}".format(PORTAL_API_BASE_URL, WORKSPACE_ID)
+    headers = {
+        "accept": "application/json",
+        "X-API-Signature": signature,
+        "Content-Type": "application/json",
+    }
+
+    response = requests.post(url, headers=headers, data=payload)
+    response.raise_for_status()
+    response_json = response.json()
+
+    metadata_df = pd.DataFrame(response_json.get("metadata"))
+    pipeline_id = response_json.get("pipeline_id")
+    tax_level = response_json.get("tax_level", "species")
+    pipeline_data_ids = metadata_df["pipeline_data_id"].tolist()
+
+    # Step 2: Query DocumentDB
+    doc_db = next(get_local_client())
+    result = doc_db.pipeline_run_results[str(pipeline_id)].find(
+        {"run_result_id": {"$in": pipeline_data_ids}},
+        {"uuid": 0, "_id": 0, "run_id": 0, "workspace_id": 0, "raw_data_id": 0}
+    )
+    df = pd.DataFrame(list(result))
+    df = df.rename(columns={"run_result_id": "pipeline_data_id"})
+    df = df.set_index("pipeline_data_id")
+    df = df.select_dtypes(include=["number"])
+
+    # Step 3: GCAS -> species names
+    gcas = df.columns.tolist()
+    payload = json.dumps({"gcas": gcas, "tax_level": tax_level}, separators=(',', ':'), ensure_ascii=False)
+    signature = hmac.new(API_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+    url = "{}/external/convert_gcas?workspace_id={}".format(PORTAL_API_BASE_URL, WORKSPACE_ID)
+    headers["X-API-Signature"] = signature
+
+    response = requests.post(url, headers=headers, data=payload)
+    response.raise_for_status()
+    df = df.rename(columns=response.json())
+    df = df.groupby(df.columns, axis=1).sum()
+
+    # Step 4: Merge and output as TSV
+    df = metadata_df.merge(df, on="pipeline_data_id", how="inner")
+    df = pd.concat([pd.DataFrame([df.columns], columns=df.columns), df], ignore_index=True).T
+    df.columns = df.iloc[0]
+    df = df.drop(df.index[0])
+
+    df.to_csv(INPUT_FILE, sep="\t", index=False, float_format="{:f}".format, encoding="utf-8")
+    print("Input data written to {}".format(INPUT_FILE))
+
+if __name__ == "__main__":
+    main()
