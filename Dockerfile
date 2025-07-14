@@ -57,14 +57,14 @@ RUN pip install --upgrade pip setuptools wheel && \
       boto3 \
       pydantic \
       pydantic_settings \
-      "numpy==1.24.4" \
+      "numpy==1.24.3" \
       "pandas==2.2.3" \
       scipy \
       matplotlib \
       scikit-learn \
       biom-format \
       h5py \
-      rpy2 \
+      "rpy2==3.5.10" \
       requests
 
 # 4. Install LEfSe into the Lambda root if still needed
@@ -86,22 +86,22 @@ COPY lambda_function.py ${LAMBDA_TASK_ROOT}/
 COPY lefse_preprocessing.py ${LAMBDA_TASK_ROOT}/
 COPY submit_results.py ${LAMBDA_TASK_ROOT}/
 
-## 6. Set up local testing needs
-#ADD https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie \
-#    /usr/local/bin/aws-lambda-rie
-#RUN chmod +x /usr/local/bin/aws-lambda-rie
-#
-#WORKDIR ${LAMBDA_TASK_ROOT}
-#
-## Create an entrypoint script for local testing
-#RUN echo '#!/bin/bash' > /entrypoint.sh && \
-#    echo 'if [ -z "${AWS_LAMBDA_RUNTIME_API}" ]; then' >> /entrypoint.sh && \
-#    echo '    exec /usr/local/bin/aws-lambda-rie python3 -m awslambdaric $1' >> /entrypoint.sh && \
-#    echo 'else' >> /entrypoint.sh && \
-#    echo '    exec python3 -m awslambdaric $1' >> /entrypoint.sh && \
-#    echo 'fi' >> /entrypoint.sh && \
-#    chmod +x /entrypoint.sh
-#ENTRYPOINT ["/entrypoint.sh"]
+# 6. Set up local testing needs
+ADD https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie \
+    /usr/local/bin/aws-lambda-rie
+RUN chmod +x /usr/local/bin/aws-lambda-rie
+
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+# Create an entrypoint script for local testing
+RUN echo '#!/bin/bash' > /entrypoint.sh && \
+    echo 'if [ -z "${AWS_LAMBDA_RUNTIME_API}" ]; then' >> /entrypoint.sh && \
+    echo '    exec /usr/local/bin/aws-lambda-rie python3 -m awslambdaric $1' >> /entrypoint.sh && \
+    echo 'else' >> /entrypoint.sh && \
+    echo '    exec python3 -m awslambdaric $1' >> /entrypoint.sh && \
+    echo 'fi' >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
 
 # Set the CMD to your handler
