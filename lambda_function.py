@@ -27,10 +27,6 @@ def lambda_handler(event, context):
         config = {
             "workspace_id": event["workspace_id"],
             "analysis_id": event["analysis_id"],
-            "lefse_params": event.get(
-                "lefse_params",
-                {"class_col": 2, "subject_col": 1, "norm_value": 1000000},
-            ),
         }
 
         os.chdir(work_dir)
@@ -40,7 +36,7 @@ def lambda_handler(event, context):
         input_file = os.path.join(work_dir, "input_data.txt")
         mapping_file = os.path.join(work_dir, "column_name_mapping.json")
 
-        preprocess_data(
+        params = preprocess_data(
             config=config, output_file=input_file, mapping_file=mapping_file
         )
 
@@ -55,12 +51,16 @@ def lambda_handler(event, context):
             "/var/task/lefse_format_input.py",  # The wrapper script handles Python 2
             input_file,
             formatted_file,
-            "-c",
-            str(config["lefse_params"]["class_col"]),
             "-u",
-            str(config["lefse_params"]["subject_col"]),
+            params.get("subject_row", 1),
+            "-c",
+            params.get("class_row", 2),
+            str(1),
+            "-u",
+            str(2),
             "-o",
-            str(config["lefse_params"]["norm_value"]),
+            params.get("norm_value", 1000000),
+            str(1000000),  # This is the normalization value
         ]
 
         logging.info("Running command: %s", " ".join(format_cmd))

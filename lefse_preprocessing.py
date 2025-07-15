@@ -49,6 +49,7 @@ def preprocess_data(config, output_file, mapping_file):
 
     pipeline_id = response_json.get("pipeline_id")
     tax_level = response_json.get("tax_level", "species")
+    params = response_json.get("params", {})
     pipeline_data_ids = metadata_df["pipeline_data_id"].tolist()
 
     logging.info("Pipeline ID: %s", pipeline_id)
@@ -132,3 +133,5 @@ def preprocess_data(config, output_file, mapping_file):
     df.to_csv(
         output_file, sep="\t", index=False, float_format="{:f}".format, encoding="utf-8"
     )
+
+    return params
