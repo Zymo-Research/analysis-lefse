@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 
+import boto3
 import pandas as pd
 import requests
 
@@ -27,10 +28,23 @@ def submit_error(config, message):
     response.raise_for_status()
 
 
-def submit_results(config, output_file, mapping_file):
+def upload_to_s3(file, analysis_id, s3_client):
+    """Upload file content to S3 bucket"""
+    # This function should implement the logic to upload the file_content to S3
+    # file is the path to the file to be uploaded
+
+    file_name = f"{settings.ENV}/anaysis_results/{analysis_id}/{file.split('/')[-1]}"
+    s3_client.upload_file(file, settings.S3_BUCKET, file_name)
+
+    print(f"File {file_name} uploaded to S3 bucket {settings.S3_BUCKET}")
+
+    return f"s3://{settings.S3_BUCKET}/{file_name}"  # noqa: E231
+
+
+def submit_results(config, output_files, mapping_file):
     """Submit results with config parameter"""
     # Read LDA results
-    df = pd.read_csv(output_file, sep="\t", dtype=str)
+    df = pd.read_csv(output_files[0], sep="\t", dtype=str, header=None)
 
     # Rename columns
     rename_map = {
@@ -51,10 +65,21 @@ def submit_results(config, output_file, mapping_file):
     df = df[df["class"].notna()]
     for col in ["lda", "p_value", "log_highest_mean"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # Submit
     lda_json = df.to_dict(orient="records")
-    payload_dict = {"analysis_id": config["analysis_id"], "result": {"lefse": lda_json}}
+    # Submit
+
+    s3_client = boto3.client("s3")
+    s3_paths = []
+    # post images to s3
+    for each in output_files[1:]:
+        # Assuming a function upload_to_s3 exists to handle S3 uploads
+        s3_path = upload_to_s3(each, config["analysis_id"], s3_client)
+        s3_paths.append(s3_path)
+
+    payload_dict = {
+        "analysis_id": config["analysis_id"],
+        "result": {"s3_paths": s3_paths, "lefse": lda_json},
+    }
     payload = json.dumps(payload_dict, separators=(",", ":"), ensure_ascii=False)
     signature = hmac.new(
         settings.API_KEY.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
