@@ -34,10 +34,15 @@
 4. **Update Lambda function:**
    ENV options include: dev, staging, prod
    ```bash
+   aws lambda update-function-code \
+      --function-name lefseAnalysisLambda \
+      --region ap-southeast-1 \
+      --image-uri 256056681342.dkr.ecr.ap-southeast-1.amazonaws.com/iomics/analyses/lefse-lambda:latest
+
    aws lambda update-function-configuration \
       --function-name lefseAnalysisLambda \
       --region ap-southeast-1 \
-      --environment Variables="{ENV=dev,API_KEY=/dev/data_access/API_KEY,PORTAL_API_URL=https://test-data-access.iomics.io}"
+      --environment Variables="{ENV=dev,API_KEY=/dev/data_access/API_KEY,PORTAL_API_URL=https://test-data-access.iomics.io/api/v1/external}"
    ```
 
 ## Local Testing
