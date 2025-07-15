@@ -100,9 +100,9 @@ def preprocess_data(config, output_file, mapping_file):
     response.raise_for_status()
     df = df.rename(columns=response.json())
 
-    # remove total_counts column if it exists
-    if "total_counts" in df.columns:
-        df = df.drop(columns=["total_counts"])
+    # remove total_count column if it exists
+    if "total_count" in df.columns:
+        df = df.drop(columns=["total_count"])
 
     # Clean column names
     df = df.loc[:, (df.columns.str.len() > 1) & (~df.columns.str.match(r"^_"))]
