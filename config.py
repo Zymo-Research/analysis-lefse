@@ -14,13 +14,14 @@ class Settings(BaseSettings):
     S3_BUCKET: str = "io-squidsuite-data"
 
     @field_validator("API_KEY")
-    def validate_api_key(cls, v):
+    def validate_api_key(cls, v, info):
+        env_value = info.data.get("ENV", "local")
         # if the key is from SSM, it will be fetched here
-        # check if it matches pattern /{ENV}/data_access/API_KEY
+        # check if it matches pattern /{env_value}/data_access/API_KEY
         if v.startswith("/"):
             ssm = boto3.client("ssm", region_name="ap-southeast-1")
             v = ssm.get_parameter(
-                Name=f"/{cls.ENV}/data_access/API_KEY", WithDecryption=True
+                Name=f"/{env_value}/data_access/API_KEY", WithDecryption=True
             )["Parameter"]["Value"]
 
         return v
