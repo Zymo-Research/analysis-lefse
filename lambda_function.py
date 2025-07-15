@@ -43,7 +43,7 @@ def lambda_handler(event, context):
         # Step 2: Run LEfSe
         logging.info("Running LEfSe analysis...")
         formatted_file = os.path.join(work_dir, "formatted.in")
-        output_file = os.path.join(work_dir, "lda_results.txt")
+        output_file = os.path.join(work_dir, "lda_results.res")
 
         # Format input - explicitly use Python 2 if needed
         format_cmd = [
@@ -52,15 +52,11 @@ def lambda_handler(event, context):
             input_file,
             formatted_file,
             "-u",
-            params.get("subject_row", 1),
+            params.get("subject_row", str(2)),
             "-c",
-            params.get("class_row", 2),
-            str(1),
-            "-u",
-            str(2),
+            params.get("class_row", str(1)),
             "-o",
-            params.get("norm_value", 1000000),
-            str(1000000),  # This is the normalization value
+            params.get("norm_value", str(1000000)),
         ]
 
         logging.info("Running command: %s", " ".join(format_cmd))
@@ -77,10 +73,69 @@ def lambda_handler(event, context):
         if result.returncode != 0:
             raise Exception(f"run_lefse failed: {result.stderr}")
 
+        output_file_image = os.path.join(work_dir, "output_file_image.res")
+        # replace ' ' with '_' in output_file in bash, write new file for cladogram
+        # Read output_file, replace ' ' with '_', write to output_file_image
+        with open(output_file, "r") as fin, open(output_file_image, "w") as fout:
+            for line in fin:
+                fout.write(line.replace(" ", "_"))
+
+        # run cladogram
+        cladogram_cmd = [
+            "python",
+            "/var/task/lefse_plot_cladogram.py",
+            output_file_image,
+            os.path.join(work_dir, "cladogram.png"),
+            "--format",
+            "png",
+        ]
+        logging.info("Running command: %s", " ".join(cladogram_cmd))
+        result = subprocess.run(
+            cladogram_cmd, capture_output=True, text=True, cwd=work_dir
+        )
+        if result.returncode != 0:
+            raise Exception(f"run_cladogram failed: {result.stderr}")
+
+        # run plot features
+        # plot_cmd = [
+        #    "python",
+        #    "/var/task/lefse_plot_features.py",
+        #    formatted_file,
+        #    output_file,
+        #    os.path.join(work_dir, "features.png"),
+        # ]
+        # logging.info("Running command: %s", " ".join(plot_cmd))
+        # result = subprocess.run(
+        #    plot_cmd, capture_output=True, text=True, cwd=work_dir
+        # )
+        # if result.returncode != 0:
+        #    raise Exception(f"run_plot_features failed: {result.stderr}")
+        #
+        # run plot res
+        plot_res_cmd = [
+            "python",
+            "/var/task/lefse_plot_res.py",
+            output_file_image,
+            os.path.join(work_dir, "res.png"),
+        ]
+
+        logging.info("Running command: %s", " ".join(plot_res_cmd))
+        result = subprocess.run(
+            plot_res_cmd, capture_output=True, text=True, cwd=work_dir
+        )
+        if result.returncode != 0:
+            raise Exception(f"run_plot_res failed: {result.stderr}")
+
         # Step 3: Submit results
         logging.info("Submitting results...")
         response = submit_results(
-            config=config, output_file=output_file, mapping_file=mapping_file
+            config=config,
+            output_files=[
+                output_file,
+                os.path.join(work_dir, "cladogram.png"),
+                os.path.join(work_dir, "res.png"),
+            ],
+            mapping_file=mapping_file,
         )
         logging.info("Results submitted successfully: %s", response)
 
