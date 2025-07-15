@@ -11,6 +11,8 @@ class Settings(BaseSettings):
 
     PORTAL_API_URL: str = "http://host.docker.internal:8000/api/v1/external"
 
+    S3_BUCKET: str = "io-squidsuite-data"
+
     @field_validator("API_KEY")
     def validate_api_key(cls, v):
         # if the key is from SSM, it will be fetched here
